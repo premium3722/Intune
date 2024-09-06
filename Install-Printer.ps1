@@ -59,6 +59,7 @@ If ($ENV:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
 $LogfilePath = "C:\temp\Intune\logs"
 $Logfile = "C:\temp\Intune\logs\$PrinterName.html"
 $start_time = Get-Date
+$exitcode = 0
 
 # Log Funktion
 function WriteLog {
@@ -97,10 +98,10 @@ WriteLog "Printer Name: $PrinterName"
 WriteLog "Driver Name: $DriverName"
 WriteLog "INF File: $INFFile"
 
-$INFARGS = @(
-    "/add-driver"
-    "$INFFile"
-)
+#$INFARGS = @(
+#    "/add-driver"
+#    "$INFFile"
+#)
 
 If (-not $ThrowBad) {
 
@@ -108,13 +109,15 @@ If (-not $ThrowBad) {
 
         #Stage driver to driver store
         WriteLog "Staging Driver zu Windows Driver Store mit INF ""$($INFFile)"""
-        WriteLog "Starte Command: Start-Process pnputil.exe -ArgumentList "$INFARGS /a" -Wait -PassThru"
-        Start-Process pnputil.exe -ArgumentList "$INFARGS /a" -Wait -PassThru
+        WriteLog "Starte Command: pnputil.exe /a "$INFFile""
+        pnputil.exe /a "$INFFile"
+        sleep 30
     }
     Catch {
         WriteLog "Fehler Treiber konnte nicht zum Driver Store hinzugefügt werden"
         WriteLog "$($_.Exception.Message)"
         WriteLog "$($_.Exception)"
+        $exitcode = 300
         $ThrowBad = $True
     }
 }
@@ -136,6 +139,7 @@ If (-not $ThrowBad) {
         WriteLog "Fehler bei Installation von Drucker Treiber" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
         WriteLog "$($_.Exception)"
+        $exitcode = 305
         $ThrowBad = $True
     }
 }
@@ -158,6 +162,7 @@ If (-not $ThrowBad) {
         WriteLog "Fehler beim erstellen von Drucker Port" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
         WriteLog "$($_.Exception)"
+        $exitcode = 310
         $ThrowBad = $True
     }
 }
@@ -186,12 +191,13 @@ If (-not $ThrowBad) {
         else {
             WriteLog "Drucker installation Fehler bei Drucker" -ForegroundColor Red
             $ThrowBad = $True
-            Throw "Drucker installation Fehler bei Drucker: $PrinterName" -ForegroundColor Red
+            Throw "Drucker installation Fehler bei Drucker: $PrinterName"
         }
     }
     Catch {
         WriteLog "Fehler Drucker konnte nicht ersteltl werden" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
+        $exitcode = 320
         $ThrowBad = $True
         Throw $_
     }
@@ -219,6 +225,7 @@ If (-not $ThrowBad) {
             Catch {
                 WriteLog "Die Drucker konfiguration konnte auf beide Möglichkeiten nicht hinzugefügt werden." -ForegroundColor Red
                 WriteLog "$($_.Exception.Message)"
+                $exitcode = 500
             }
         }
     }
@@ -228,9 +235,11 @@ If (-not $ThrowBad) {
 If ($ThrowBad) 
 {
     WriteLog "Ein Fehler während der Installation. Hier befindet sich das Log: $Logfile"
-    WriteLog "Installation Fehlgeschlagen"
+    WriteLog "Installation Fehlgeschlagen Exitcode: $exitcode"
+    exit $exitcode
 }
 else
 {
-    WriteLog "Script erfolgreich beendet"
+    WriteLog "Script erfolgreich beendet Exitcode: $exitcode"
+    exit $exitcode
 }
