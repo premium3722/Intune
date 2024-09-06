@@ -89,9 +89,9 @@ if (!(Test-Path $Logfile)) {
 
 WriteLog "##################################"
 WriteLog "Installation started"
-WriteLog"##################################"
+WriteLog "##################################"
 WriteLog "Install Printer using the following values..."
-WriteLog"Port Name: $PortName"
+WriteLog "Port Name: $PortName"
 WriteLog "Printer IP: $PrinterIP"
 WriteLog "Printer Name: $PrinterName"
 WriteLog "Driver Name: $DriverName"
@@ -109,8 +109,7 @@ If (-not $ThrowBad) {
         #Stage driver to driver store
         WriteLog "Staging Driver to Windows Driver Store using INF ""$($INFFile)"""
         WriteLog "Running command: Start-Process pnputil.exe -ArgumentList $($INFARGS) -wait -passthru"
-        Start-Process pnputil.exe -ArgumentList $INFARGS -wait -passthru
-
+        Start-Process pnputil.exe -ArgumentList "$INFARGS /a" -Wait -PassThru
     }
     Catch {
         WriteLog "Error staging driver to Driver Store"
