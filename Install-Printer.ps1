@@ -3,6 +3,7 @@
 Created on:   31/12/2021
 Created by:   Ben Whitmore
 Edited By:    premium3722
+Version:      1.0 (06.09.2024)
 Filename:     Install-Printer.ps1
 
 Simple script to install a network printer from an INF file. The INF and required CAB files hould be in the same directory as the script if creating a Win32app
@@ -10,17 +11,17 @@ Simple script to install a network printer from an INF file. The INF and require
 #### Win32 app Commands ####
 
 Install:
-powershell.exe -executionpolicy bypass -file .\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "Canon Printer Upstairs" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf"
+powershell.exe -executionpolicy bypass -file .\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -configfile "PRI-DEMO-01-dat"
 
 Uninstall:
-powershell.exe -executionpolicy bypass -file .\Remove-Printer.ps1 -PrinterName "Canon Printer Upstairs"
+powershell.exe -executionpolicy bypass -file .\Remove-Printer.ps1 -PrinterName "PRI-DEMO-01"
 
 Detection:
-HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Print\Printers\Canon Printer Upstairs
-Name = "Canon Printer Upstairs"
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Print\Printers\PRI-DEMO-01
+Name = "PRI-DEMO-01"
 
-.Example
-.\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "Canon Printer Upstairs" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf"
+.Beispiel
+.\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName ""PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -configfile "PRI-DEMO-01-dat"
 #>
 
 [CmdletBinding()]
@@ -36,7 +37,7 @@ Param (
     [Parameter(Mandatory = $True)]
     [String]$INFFile,
     [Parameter(Mandatory = $False)]
-    [String]$configfile  # Neuer optionaler Parameter
+    [String]$configfile  
 )
 
 #Reset Error catching variable
@@ -63,8 +64,7 @@ $start_time = Get-Date
 function WriteLog {
     Param (
         [string]$LogString,
-        [string]$ForegroundColor = "black",
-        [bool]$IsBold = $false
+        [string]$ForegroundColor = "black"
     )
     $Stamp = (Get-Date).ToString("yyyy/MM/dd HH:mm:ss")
     $LogMessage = "$Stamp <span style='color: $ForegroundColor;'>$LogString</span><br>"
@@ -107,14 +107,13 @@ If (-not $ThrowBad) {
     Try {
 
         #Stage driver to driver store
-        WriteLog "Staging Driver to Windows Driver Store using INF ""$($INFFile)"""
-        WriteLog "Running command: Start-Process pnputil.exe -ArgumentList $($INFARGS) -wait -passthru"
+        WriteLog "Staging Driver zu Windows Driver Store mit INF ""$($INFFile)"""
+        WriteLog "Starte Command: Start-Process pnputil.exe -ArgumentList "$INFARGS /a" -Wait -PassThru"
         Start-Process pnputil.exe -ArgumentList "$INFARGS /a" -Wait -PassThru
     }
     Catch {
-        WriteLog "Error staging driver to Driver Store"
+        WriteLog "Fehler Treiber konnte nicht zum Driver Store hinzugefügt werden"
         WriteLog "$($_.Exception.Message)"
-        WriteLog "Error staging driver to Driver Store"
         WriteLog "$($_.Exception)"
         $ThrowBad = $True
     }
@@ -126,17 +125,16 @@ If (-not $ThrowBad) {
         #Install driver
         $DriverExist = Get-PrinterDriver -Name $DriverName -ErrorAction SilentlyContinue
         if (-not $DriverExist) {
-            WriteLog -Stamp -Value "Adding Printer Driver ""$($DriverName)"""
+            WriteLog "Hinzufügen von Drucker Treiber ""$($DriverName)"""
             Add-PrinterDriver -Name $DriverName -Confirm:$false
         }
         else {
-           WriteLog "Print Driver ""$($DriverName)"" already exists. Skipping driver installation."
+           WriteLog "Drucker Treiber ""$($DriverName)"" existiert bereits. Überspringen Treiber installation." -ForegroundColor Orange
         }
     }
     Catch {
-        WriteLog "Error installing Printer Driver"
+        WriteLog "Fehler bei Installation von Drucker Treiber" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
-        WriteLog "Error installing Printer Driver"
         WriteLog "$($_.Exception)"
         $ThrowBad = $True
     }
@@ -146,19 +144,19 @@ If (-not $ThrowBad) {
     Try {
 
         #Create Printer Port
+        WriteLog "Prüfe ob Drucker Port existiert"
         $PortExist = Get-Printerport -Name $PortName -ErrorAction SilentlyContinue
         if (-not $PortExist) {
-            WriteLog "Adding Port ""$($PortName)"""
+            WriteLog "Füge Port ""$($PortName)"" hinzu"
             Add-PrinterPort -name $PortName -PrinterHostAddress $PrinterIP -Confirm:$false
         }
         else {
-           WriteLog "Port ""$($PortName)"" already exists. Skipping Printer Port installation."
+           WriteLog "Port ""$($PortName)"" existiert bereits. Überspringe Drucker Port installation." -ForegroundColor Orange
         }
     }
     Catch {
-        WriteLog "Error creating Printer Port"
+        WriteLog "Fehler beim erstellen von Drucker Port" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
-        WriteLog "Error creating Printer Port"
         WriteLog "$($_.Exception)"
         $ThrowBad = $True
     }
@@ -166,46 +164,73 @@ If (-not $ThrowBad) {
 
 If (-not $ThrowBad) {
     Try {
-
-        #Add Printer
+        # Abschnitt 1: Drucker hinzufügen
+        # Prüfen, ob der Drucker bereits existiert
         $PrinterExist = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
         if (-not $PrinterExist) {
-            WriteLog "Adding Printer ""$($PrinterName)"""
+            WriteLog "Füge Drucker hinzu da nicht vorhanden ""$($PrinterName)"""
             Add-Printer -Name $PrinterName -DriverName $DriverName -PortName $PortName -Confirm:$false
         }
         else {
-            WriteLog "Printer ""$($PrinterName)"" already exists. Removing old printer..."
+            WriteLog "Drucker ""$($PrinterName)"" existiert bereits. Alter Drucker wird entfernt..." 
             Remove-Printer -Name $PrinterName -Confirm:$false
-            WriteLog "Adding Printer ""$($PrinterName)"""
+            WriteLog "Füge Drucker hinzu ""$($PrinterName)"""
             Add-Printer -Name $PrinterName -DriverName $DriverName -PortName $PortName -Confirm:$false
         }
 
+        # Erneute Prüfung, ob der Drucker jetzt vorhanden ist
         $PrinterExist2 = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
         if ($PrinterExist2) {
-           WriteLog "Printer ""$($PrinterName)"" added successfully"
-            
-            # Falls $configfile nicht leer ist, führe den Code aus
-            if ($configfile) {
-                WriteLog "Importing Printer Configuration from file: $configfile"
-                Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$env:USERPROFILE\Desktop\Printer\$configfile.dat`" f c d g u" -NoNewWindow -Wait
-            }
+            WriteLog "Drucker ""$($PrinterName)"" wurde erfolgreich hinzugefügt" -ForegroundColor Green
         }
         else {
-            WriteLog "Error creating Printer"
-            WriteLog "Printer ""$($PrinterName)"" error creating printer"
+            WriteLog "Drucker installation Fehler bei Drucker" -ForegroundColor Red
             $ThrowBad = $True
+            Throw "Drucker installation Fehler bei Drucker: $PrinterName" -ForegroundColor Red
         }
     }
     Catch {
-        WriteLog "Error creating Printer"
+        WriteLog "Fehler Drucker konnte nicht ersteltl werden" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
-        WriteLog "Error creating Printer"
-        WriteLog "$($_.Exception)"
         $ThrowBad = $True
+        Throw $_
+    }
+
+    # Abschnitt 2: Konfigurationsdatei hinzufügen
+    if (-not $ThrowBad -and $configfile) {
+        Try {
+            WriteLog "Versuche Drucker Konfig zu importieren von: $configfile"
+            
+            # Erster Versuch, die Konfigurationsdatei hinzuzufügen
+            Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$configfile`" f c d g u" -Wait -NoNewWindow
+            sleep 5
+            WriteLog "Drucker Konfiguration erfolgreich impoortiert von: $configfile" -ForegroundColor Green
+        }
+        Catch {
+            WriteLog "Drucker Konfiguration konnte nicht hinzugefügt werden versuche zweite Variante..." -ForegroundColor Orange
+            WriteLog "$($_.Exception.Message)"
+            
+            # Alternativer Versuch
+            Try {
+                Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$configfile`" 2 7 c d g u" -Wait -NoNewWindow
+                sleep 5
+                WriteLog "Zweite Methode: Drucker Konfiguration wurde erfolgreich importiert von: $configfile" -ForegroundColor Green
+            }
+            Catch {
+                WriteLog "Die Drucker konfiguration konnte auf beide Möglichkeiten nicht hinzugefügt werden." -ForegroundColor Red
+                WriteLog "$($_.Exception.Message)"
+            }
+        }
     }
 }
 
-If ($ThrowBad) {
-    WriteLog "An error was thrown during installation. Installation failed. Refer to the log file in %temp% for details"
-    WriteLog "Installation Failed"
+
+If ($ThrowBad) 
+{
+    WriteLog "Ein Fehler während der Installation. Hier befindet sich das Log: $Logfile"
+    WriteLog "Installation Fehlgeschlagen"
+}
+else
+{
+    WriteLog "Script erfolgreich beendet"
 }
