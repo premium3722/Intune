@@ -11,7 +11,7 @@ Simple script to install a network printer from an INF file. The INF and require
 #### Win32 app Commands ####
 
 Install:
-powershell.exe -executionpolicy bypass -file .\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -configfile "PRI-DEMO-01-dat"
+powershell.exe -executionpolicy bypass -file .\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -Printerconifg "PRI-DEMO-01-dat"
 
 Uninstall:
 powershell.exe -executionpolicy bypass -file .\Remove-Printer.ps1 -PrinterName "PRI-DEMO-01"
@@ -20,8 +20,9 @@ Detection:
 HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Print\Printers\PRI-DEMO-01
 Name = "PRI-DEMO-01"
 
-.Beispiel
-.\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName ""PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -configfile "PRI-DEMO-01-dat"
+-Beispiel
+.\Install-Printer.ps1 -PortName "IP_10.10.1.1" -PrinterIP "10.1.1.1" -PrinterName "PRI-DEMO-01" -DriverName "Canon Generic Plus UFR II" -INFFile "CNLB0MA64.inf" -Printerconifg "PRI-DEMO-01-dat"
+
 #>
 
 [CmdletBinding()]
@@ -36,12 +37,12 @@ Param (
     [String]$DriverName,
     [Parameter(Mandatory = $True)]
     [String]$INFFile,
-    [Parameter(Mandatory = $False)]
-    [String]$configfile  
+    [Parameter(Mandatory = $True)]
+    [String]$Printerconifg  
 )
 
 #Reset Error catching variable
-$Throwbad = $Null
+$Throwbad = $False
 
 #Run script in 64bit PowerShell to enumerate correct path for pnputil
 If ($ENV:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
@@ -57,9 +58,10 @@ If ($ENV:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
 ###################################################Variablen Setzen##############################################################################                                                                                                                                                                                                 
 # Variablen
 $LogfilePath = "C:\temp\Intune\logs"
-$Logfile = "C:\temp\Intune\logs\$PrinterName.html"
 $start_time = Get-Date
 $exitcode = 0
+$Stamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
+$Logfile = "C:\temp\Intune\logs\$PrinterName-$Stamp.html"
 
 # Log Funktion
 function WriteLog {
@@ -76,7 +78,11 @@ function WriteLog {
 Write-Host "Script start"
 WriteLog "Script start" -ForegroundColor Black
 
-if (!(Test-Path $LogfilePath)) { New-Item -Path $LogfilePath -ItemType Directory -Force }
+if (!(Test-Path $LogfilePath)) { 
+    New-Item -Path $LogfilePath -ItemType Directory -Force 
+}
+
+
 if (!(Test-Path $Logfile)) {
     New-Item -Path $Logfile -ItemType File -Force
     WriteLog "Logfile wird erstellt" -ForegroundColor Green
@@ -97,6 +103,7 @@ WriteLog "Printer IP: $PrinterIP"
 WriteLog "Printer Name: $PrinterName"
 WriteLog "Driver Name: $DriverName"
 WriteLog "INF File: $INFFile"
+WriteLog "Config File: $Printerconifg"
 
 #$INFARGS = @(
 #    "/add-driver"
@@ -195,39 +202,53 @@ If (-not $ThrowBad) {
         }
     }
     Catch {
-        WriteLog "Fehler Drucker konnte nicht ersteltl werden" -ForegroundColor Red
+        WriteLog "Fehler Drucker konnte nicht erstellt werden" -ForegroundColor Red
         WriteLog "$($_.Exception.Message)"
         $exitcode = 320
         $ThrowBad = $True
         Throw $_
     }
+}
 
-    # Abschnitt 2: Konfigurationsdatei hinzufügen
-    if (-not $ThrowBad -and $configfile) {
-        Try {
-            WriteLog "Versuche Drucker Konfig zu importieren von: $configfile"
+# Abschnitt 2: Konfigurationsdatei hinzufügen
+if (-not $ThrowBad) 
+{
+    WriteLog "KonfigFileImport Start"
+    IF ($Printerconifg)
+    {
+        WriteLog "KonfigFile vorhanden"
+        Try 
+        {
+            WriteLog "Versuche Drucker Konfig zu importieren von: $Printerconifg"
             
             # Erster Versuch, die Konfigurationsdatei hinzuzufügen
-            Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$configfile`" f c d g u" -Wait -NoNewWindow
+            Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n $PrinterName /a $Printerconifg f c d g u" -Wait -NoNewWindow
             sleep 5
-            WriteLog "Drucker Konfiguration erfolgreich impoortiert von: $configfile" -ForegroundColor Green
+            WriteLog "Drucker Konfiguration erfolgreich impoortiert von: $Printerconifg" -ForegroundColor Green
         }
         Catch {
             WriteLog "Drucker Konfiguration konnte nicht hinzugefügt werden versuche zweite Variante..." -ForegroundColor Orange
             WriteLog "$($_.Exception.Message)"
-            
+          
             # Alternativer Versuch
-            Try {
-                Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$configfile`" 2 7 c d g u" -Wait -NoNewWindow
+            Try 
+            {
+                Start-Process "RUNDLL32.EXE" -ArgumentList "PRINTUI.DLL,PrintUIEntry /Sr /n `"$PrinterName`" /a `"$Printerconifg`" 2 7 c d g u" -Wait -NoNewWindow
                 sleep 5
-                WriteLog "Zweite Methode: Drucker Konfiguration wurde erfolgreich importiert von: $configfile" -ForegroundColor Green
+                WriteLog "Zweite Methode: Drucker Konfiguration wurde erfolgreich importiert von: $Printerconifg" -ForegroundColor Green
             }
-            Catch {
+            Catch 
+            {
                 WriteLog "Die Drucker konfiguration konnte auf beide Möglichkeiten nicht hinzugefügt werden." -ForegroundColor Red
-                WriteLog "$($_.Exception.Message)"
+                WriteLog "Fehlermeldung: $($_.Exception.Message)"
+                WriteLog "Details: $($_.Exception)"
                 $exitcode = 500
             }
         }
+    }
+    else
+    {
+        WriteLog "Kein KonfigFile gefunden" -ForegroundColor orange
     }
 }
 
